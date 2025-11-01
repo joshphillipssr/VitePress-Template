@@ -1,0 +1,16 @@
+{
+  "name": "joshphillipssr.com",
+  "version": "1.0.0",
+  "description": "Josh Phillips Homepage",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "vitepress": "^1.6.4",
+    "vitepress-plugin-mermaid": "^2.0.17"
+  }
+}
