@@ -1,101 +1,104 @@
-# joshphillipssr.com
+#!/usr/bin/env bash
+set -euo pipefail
+# Ensure a shared Docker network exists for Traefik and sites.
+#
+# Optional:
+#   NETWORK_NAME="traefik_proxy"
 
-A clean, modern **VitePress**-based documentation and portfolio site.
+NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
 
-This repository powers [https://joshphillipssr.com](https://joshphillipssr.com) — built from scratch using [VitePress](https://vitepress.dev) with a minimal sidebar-only layout.
+# Ensure Docker available
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Error: docker not found or not in PATH." >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "Error: cannot talk to the Docker daemon. Ensure your user is in the 'docker' group." >&2
+  exit 1
+fi
 
----
+if docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1; then
+  echo "Network '${NETWORK_NAME}' already exists."
+else
+  echo "Creating network '${NETWORK_NAME}'..."
+  docker network create "${NETWORK_NAME}" >/dev/null
+  echo "✅ Created network '${NETWORK_NAME}'."
+fi
+#!/usr/bin/env bash
+set -euo pipefail
+# Update a deployed site by pulling the latest image and recreating the stack.
+#
+# Required:
+#   SITE_NAME="shortname"
+# Optional:
+#   TARGET_DIR="/opt/sites" (default)
+#
+# Example:
+#   SITE_NAME="jpsr" ./traefik/scripts/update_site.sh
 
-## 🚀 Features
+: "${SITE_NAME:?SITE_NAME required}"
+TARGET_DIR="${TARGET_DIR:-/opt/sites}"
+BASE="${TARGET_DIR}/${SITE_NAME}"
+COMPOSE_FILE="${BASE}/docker-compose.yml"
 
-- ⚡️ Built with [VitePress](https://vitepress.dev)
-- 🎨 Clean sidebar-only theme (no top navigation)
-- 📄 Easy Markdown-based content structure
-- 🧱 Designed for personal portfolios, documentation sites, or project wikis
-- ☁️ Simple deployment to Nginx or GitHub Pages
+# Ensure Docker available
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Error: docker not found or not in PATH." >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "Error: cannot talk to the Docker daemon. Ensure your user is in the 'docker' group." >&2
+  exit 1
+fi
 
----
+if [[ ! -f "${COMPOSE_FILE}" ]]; then
+  echo "No docker-compose.yml found for site '${SITE_NAME}' in ${BASE}."
+  exit 1
+fi
 
-## 🧰 Tech Stack
+echo "Pulling latest image(s) for ${SITE_NAME}..."
+docker compose -f "${COMPOSE_FILE}" pull
 
-- **Framework:** VitePress (`vitepress@latest`)
-- **Language:** TypeScript / Markdown
-- **Package Manager:** Yarn
-- **Hosting Example:** Nginx (Debian 12)
+echo "Recreating ${SITE_NAME} with updated image(s)..."
+docker compose -f "${COMPOSE_FILE}" up -d
 
----
+echo "✅ Updated ${SITE_NAME}."
+#!/usr/bin/env bash
+set -euo pipefail
+# Remove a deployed site stack and its compose directory.
+#
+# Required:
+#   SITE_NAME="shortname"
+# Optional:
+#   TARGET_DIR="/opt/sites" (default)
+#
+# Example:
+#   SITE_NAME="jpsr" ./traefik/scripts/remove_site.sh
 
-## 🗂️ Folder Structure
+: "${SITE_NAME:?SITE_NAME required}"
+TARGET_DIR="${TARGET_DIR:-/opt/sites}"
+BASE="${TARGET_DIR}/${SITE_NAME}"
+COMPOSE_FILE="${BASE}/docker-compose.yml"
 
-```
-joshphillipssr.com/
-├── docs/
-│   ├── .vitepress/
-│   │   └── config.mts
-│   ├── Resume/
-│   │   └── index.md
-│   └── index.md
-├── .gitignore
-├── package.json
-└── README.md
-```
+# Ensure Docker available
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Error: docker not found or not in PATH." >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "Error: cannot talk to the Docker daemon. Ensure your user is in the 'docker' group." >&2
+  exit 1
+fi
 
----
+if [[ ! -f "${COMPOSE_FILE}" ]]; then
+  echo "No docker-compose.yml found for site '${SITE_NAME}' in ${BASE}."
+  exit 0
+fi
 
-## 🏁 Getting Started
+echo "Stopping and removing ${SITE_NAME}..."
+docker compose -f "${COMPOSE_FILE}" down --remove-orphans
 
-### 1. Clone this repository
-```bash
-git clone https://github.com/joshphillipssr/joshphillipssr.com.git
-cd joshphillipssr.com
-```
+echo "Cleaning ${BASE}..."
+rm -rf "${BASE}"
 
-### 2. Install dependencies
-```bash
-yarn install
-```
-
-### 3. Start local development
-```bash
-yarn docs:dev
-```
-
-### 4. Build for production
-```bash
-yarn docs:build
-```
-
-The generated static files will be in `docs/.vitepress/dist`.
-
----
-
-## 🌐 Deployment
-
-To serve on Nginx or any static host:
-
-```bash
-rsync -a --delete docs/.vitepress/dist/ /var/www/example.com/
-sudo systemctl reload nginx
-```
-
-For GitHub Pages:
-```bash
-yarn docs:build
-git add docs/.vitepress/dist -f
-git commit -m "Deploy site"
-git subtree push --prefix docs/.vitepress/dist origin gh-pages
-```
-
----
-
-## 🧩 Credits
-
-This site was built by [Josh Phillips](https://linkedin.com/in/joshphillipssr)  
-
----
-
-## 🪄 License
-
-MIT © [Josh Phillips](https://joshphillipssr.com)
-
-You’re free to fork this repo or use it as a template to build your own VitePress site.
+echo "✅ Removed ${SITE_NAME}."
