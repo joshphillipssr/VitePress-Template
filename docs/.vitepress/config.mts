@@ -10,6 +10,9 @@ export default defineConfig({
     //   { text: 'Resume', link: '/Resume/' }
     // ],
     // show on all pages
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/joshphillipssr/joshphillipssr.com' }
+    ],
     sidebar: [
       { text: 'Home', link: '/' },
       { text: 'Resume', link: '/Resume/' }
