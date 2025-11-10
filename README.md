@@ -1,13 +1,19 @@
-#!/usr/bin/env bash
+# !/usr/bin/env bash
+
 set -euo pipefail
-# Ensure a shared Docker network exists for Traefik and sites.
+
+# Ensure a shared Docker network exists for Traefik and sites
+
 #
-# Optional:
-#   NETWORK_NAME="traefik_proxy"
+
+# Optional
+
+# NETWORK_NAME="traefik_proxy"
 
 NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
 
 # Ensure Docker available
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: docker not found or not in PATH." >&2
   exit 1
@@ -24,17 +30,26 @@ else
   docker network create "${NETWORK_NAME}" >/dev/null
   echo "✅ Created network '${NETWORK_NAME}'."
 fi
-#!/usr/bin/env bash
+# !/usr/bin/env bash
 set -euo pipefail
-# Update a deployed site by pulling the latest image and recreating the stack.
+
+# Update a deployed site by pulling the latest image and recreating the stack
+
 #
-# Required:
-#   SITE_NAME="shortname"
-# Optional:
-#   TARGET_DIR="/opt/sites" (default)
+
+# Required
+
+# SITE_NAME="shortname"
+
+# Optional
+
+# TARGET_DIR="/opt/sites" (default)
+
 #
-# Example:
-#   SITE_NAME="jpsr" ./traefik/scripts/update_site.sh
+
+# Example
+
+# SITE_NAME="jpsr" ./traefik/scripts/update_site.sh
 
 : "${SITE_NAME:?SITE_NAME required}"
 TARGET_DIR="${TARGET_DIR:-/opt/sites}"
@@ -42,6 +57,7 @@ BASE="${TARGET_DIR}/${SITE_NAME}"
 COMPOSE_FILE="${BASE}/docker-compose.yml"
 
 # Ensure Docker available
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: docker not found or not in PATH." >&2
   exit 1
@@ -63,17 +79,26 @@ echo "Recreating ${SITE_NAME} with updated image(s)..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "✅ Updated ${SITE_NAME}."
-#!/usr/bin/env bash
+# !/usr/bin/env bash
 set -euo pipefail
-# Remove a deployed site stack and its compose directory.
+
+# Remove a deployed site stack and its compose directory
+
 #
-# Required:
-#   SITE_NAME="shortname"
-# Optional:
-#   TARGET_DIR="/opt/sites" (default)
+
+# Required
+
+# SITE_NAME="shortname"
+
+# Optional
+
+# TARGET_DIR="/opt/sites" (default)
+
 #
-# Example:
-#   SITE_NAME="jpsr" ./traefik/scripts/remove_site.sh
+
+# Example
+
+# SITE_NAME="jpsr" ./traefik/scripts/remove_site.sh
 
 : "${SITE_NAME:?SITE_NAME required}"
 TARGET_DIR="${TARGET_DIR:-/opt/sites}"
@@ -81,6 +106,7 @@ BASE="${TARGET_DIR}/${SITE_NAME}"
 COMPOSE_FILE="${BASE}/docker-compose.yml"
 
 # Ensure Docker available
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: docker not found or not in PATH." >&2
   exit 1
