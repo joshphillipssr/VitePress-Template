@@ -105,7 +105,7 @@ What the script does:
 After running it, **switch to the `deploy` user**:
 
 ```bash
-su - deploy
+sudo -iu deploy
 ```
 
 ### 2  Start Traefik (as `deploy`)
