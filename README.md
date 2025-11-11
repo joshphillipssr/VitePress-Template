@@ -1,130 +1,247 @@
-# !/usr/bin/env bash
+# joshphillipssr.com
 
-set -euo pipefail
+A clean, modern **VitePress**‑based documentation and portfolio site.  The
+repository powers [https://joshphillipssr.com](https://joshphillipssr.com) and is
+intended as a template for anyone who wants to deploy a static site behind
+Traefik with automatically managed certificates via Cloudflare.
 
-# Ensure a shared Docker network exists for Traefik and sites
+This README explains both local development and full deployment using
+Docker, Traefik and GitHub Actions.  The deployment instructions assume
+Debian 12 on the target server and follow a single, opinionated plan: Docker
+runs as root on the host, day‑to‑day operations run as a non‑root `deploy`
+user, and Traefik runs as a non‑root process inside its container while
+listening on high ports (8080/8443) and publishing host ports 80/443.
 
-#
+---
 
-# Optional
+## 🚀 Features
 
-# NETWORK_NAME="traefik_proxy"
+- ⚡️ Built with [VitePress](https://vitepress.dev)
+- 🎨 Clean sidebar‑only theme (no top navigation)
+- 📄 Easy Markdown‑based content structure
+- 🧱 Designed for personal portfolios, documentation sites or project wikis
+- ☁️ Deployment via Docker + Traefik, with automatic HTTPS using Let’s Encrypt
+  DNS‑01 challenge through Cloudflare
 
-NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
+---
 
-# Ensure Docker available
+## 🧰 Tech stack
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Error: docker not found or not in PATH." >&2
-  exit 1
-fi
-if ! docker info >/dev/null 2>&1; then
-  echo "Error: cannot talk to the Docker daemon. Ensure your user is in the 'docker' group." >&2
-  exit 1
-fi
+- **Framework:** VitePress (`vitepress@latest`)
+- **Languages:** TypeScript / Markdown
+- **Package manager:** Yarn
+- **Hosting example:** Debian 12 with Docker and Traefik
 
-if docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1; then
-  echo "Network '${NETWORK_NAME}' already exists."
-else
-  echo "Creating network '${NETWORK_NAME}'..."
-  docker network create "${NETWORK_NAME}" >/dev/null
-  echo "✅ Created network '${NETWORK_NAME}'."
-fi
-# !/usr/bin/env bash
-set -euo pipefail
+---
 
-# Update a deployed site by pulling the latest image and recreating the stack
+## 🏁 Local development
 
-#
+1. **Clone this repository**
 
-# Required
+   ```bash
+   git clone https://github.com/joshphillipssr/joshphillipssr.com.git
+   cd joshphillipssr.com
+   ```
 
-# SITE_NAME="shortname"
+2. **Install dependencies**
 
-# Optional
+   ```bash
+   yarn install
+   ```
 
-# TARGET_DIR="/opt/sites" (default)
+3. **Start local dev server**
 
-#
+   ```bash
+   yarn docs:dev
+   ```
 
-# Example
+4. **Build for production**
 
-# SITE_NAME="jpsr" ./traefik/scripts/update_site.sh
+   ```bash
+   yarn docs:build
+   ```
 
-: "${SITE_NAME:?SITE_NAME required}"
-TARGET_DIR="${TARGET_DIR:-/opt/sites}"
-BASE="${TARGET_DIR}/${SITE_NAME}"
-COMPOSE_FILE="${BASE}/docker-compose.yml"
+   The generated static files live in `docs/.vitepress/dist`.
 
-# Ensure Docker available
+These steps are useful if you want to work on the site’s content or styling.
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Error: docker not found or not in PATH." >&2
-  exit 1
-fi
-if ! docker info >/dev/null 2>&1; then
-  echo "Error: cannot talk to the Docker daemon. Ensure your user is in the 'docker' group." >&2
-  exit 1
-fi
+---
 
-if [[ ! -f "${COMPOSE_FILE}" ]]; then
-  echo "No docker-compose.yml found for site '${SITE_NAME}' in ${BASE}."
-  exit 1
-fi
+## 🌍 Full deployment workflow
 
-echo "Pulling latest image(s) for ${SITE_NAME}..."
-docker compose -f "${COMPOSE_FILE}" pull
+The following procedure sets up a server from scratch, deploys Traefik and
+then serves this site via a containerized Nginx instance.  This guide is
+opinionated for simplicity; you can always adapt it later.
 
-echo "Recreating ${SITE_NAME} with updated image(s)..."
-docker compose -f "${COMPOSE_FILE}" up -d
+### 0  Cloudflare prerequisites (one time)
 
-echo "✅ Updated ${SITE_NAME}."
-# !/usr/bin/env bash
-set -euo pipefail
+- Create a Cloudflare API token with **Zone.DNS:Edit** and
+  **Zone.Zone:Read** for your domain.
+- Create `A`/`AAAA` records for `joshphillipssr.com` and `www` pointing to
+  your server’s IP.  Enable the Cloudflare proxy (**orange cloud on**).
+- Under *SSL/TLS → Overview* set the mode to **Full (strict)**.
 
-# Remove a deployed site stack and its compose directory
+### 1  Prepare the host (one time, as root)
 
-#
+Run the `host_prep.sh` script from the
+[Traefik‑Deployment](https://github.com/joshphillipssr/Traefik-Deployment) repo.
+It installs Docker and the compose plugin, creates a non‑root operator
+account, sets up directory structure and clones the Traefik repo.
 
-# Required
+```bash
+sudo bash -c "$(curl -fsSL \
+  https://raw.githubusercontent.com/joshphillipssr/Traefik-Deployment/main/traefik/scripts/host_prep.sh)"
+```
 
-# SITE_NAME="shortname"
+What the script does:
 
-# Optional
+- Installs Docker Engine, Buildx and Compose plugin if missing.
+- Creates a `deploy` user (or the user specified via `DEPLOY_USER`) and adds
+  them to the `docker` group.
+- Creates `/opt/traefik` and `/opt/sites` directories owned by `deploy`.
+- Clones the Traefik‑Deployment repository into `/opt/traefik` and marks
+  its scripts executable.
 
-# TARGET_DIR="/opt/sites" (default)
+After running it, **switch to the `deploy` user**:
 
-#
+```bash
+su - deploy
+```
 
-# Example
+### 2  Start Traefik (as `deploy`)
 
-# SITE_NAME="jpsr" ./traefik/scripts/remove_site.sh
+Run the `traefik_up.sh` script from the Traefik repo to bring up
+Traefik.  This uses Docker Compose with a named volume for ACME data and
+publishes ports 80 and 443 on the host while Traefik listens on 8080/8443
+inside the container.
 
-: "${SITE_NAME:?SITE_NAME required}"
-TARGET_DIR="${TARGET_DIR:-/opt/sites}"
-BASE="${TARGET_DIR}/${SITE_NAME}"
-COMPOSE_FILE="${BASE}/docker-compose.yml"
+```bash
+CF_API_TOKEN="<your cf token>" \
+EMAIL="you@example.com" \
+USE_STAGING=false \
+/opt/traefik/traefik/scripts/traefik_up.sh
+```
 
-# Ensure Docker available
+- `CF_API_TOKEN` – your Cloudflare token from step 0.
+- `EMAIL` – email for Let’s Encrypt registration and expiry notices.
+- `USE_STAGING` – set to `true` if you want to test against Let’s Encrypt’s
+  staging environment (avoids rate limits).
+- `NETWORK_NAME` – defaults to `traefik_proxy` and rarely needs to be
+  overridden.
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Error: docker not found or not in PATH." >&2
-  exit 1
-fi
-if ! docker info >/dev/null 2>&1; then
-  echo "Error: cannot talk to the Docker daemon. Ensure your user is in the 'docker' group." >&2
-  exit 1
-fi
+The script creates a `.env` file for Traefik, ensures the Docker network
+exists, optionally writes a Compose override to use the staging ACME
+endpoint, and then runs:
 
-if [[ ! -f "${COMPOSE_FILE}" ]]; then
-  echo "No docker-compose.yml found for site '${SITE_NAME}' in ${BASE}."
-  exit 0
-fi
+```bash
+docker compose -f traefik/docker-compose.yml --env-file traefik/.env up -d
+```
 
-echo "Stopping and removing ${SITE_NAME}..."
-docker compose -f "${COMPOSE_FILE}" down --remove-orphans
+Traefik runs as UID `65532` inside the container, the ACME certificates
+are stored in a Docker volume (`traefik_acme`), and the Docker socket is
+mounted read‑only.
 
-echo "Cleaning ${BASE}..."
-rm -rf "${BASE}"
+### 3  Bootstrap the site repository on the host (as `deploy`)
 
-echo "✅ Removed ${SITE_NAME}."
+Download or update the site code into a working directory on the server.
+A helper script `bootstrap_site_on_host.sh` in this repository does the
+work:
+
+```bash
+SITE_REPO="https://github.com/joshphillipssr/joshphillipssr.com.git" \
+SITE_DIR="/opt/joshphillipssr.com" \
+bash -c "$(curl -fsSL \
+  https://raw.githubusercontent.com/joshphillipssr/joshphillipssr.com/main/scripts/bootstrap_site_on_host.sh)"
+```
+
+The script clones the repo into `SITE_DIR` if missing or pulls the latest
+changes if it already exists.
+
+### 4  Deploy your site (as `deploy`)
+
+To deploy the site container behind Traefik, run the `deploy_to_host.sh`
+script included in this repository.  You must specify the domain names to
+route and the container image tag.  The image is built and published to
+GitHub Container Registry (GHCR) via the CI workflow when you push to
+`main`.
+
+```bash
+CF_API_TOKEN="<your cf token>" \
+EMAIL="you@example.com" \
+SITE_NAME="jpsr" \
+SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
+SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
+bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
+```
+
+What it does:
+
+1. Ensures Docker and the `traefik_proxy` network exist (no sudo needed
+   because `deploy` is in the `docker` group).
+2. Writes `/opt/sites/<SITE_NAME>/docker-compose.yml` containing a single
+   service with your image, attached to the shared network and with
+   Traefik labels for host routing and TLS.
+3. Runs `docker compose up -d` to start the container.
+
+After a few seconds you should see your site served via HTTPS.
+
+### 5  CI build & publish (automatic)
+
+A GitHub Actions workflow (`.github/workflows/build-and-push.yml`) builds
+this repository into a multi‑architecture Docker image and pushes it to
+GHCR on every push to `main`.  On first publication you must set the
+package’s visibility to **Public** under your GitHub → Settings →
+Packages page.
+
+### 6  Updates (as `deploy`)
+
+Whenever you push changes to `main`, GitHub Actions will build and push
+`ghcr.io/joshphillipssr/jpsr-site:latest`.  To pull the new image and
+recreate your running container, call the `update_site.sh` script from
+Traefik‑Deployment:
+
+```bash
+SITE_NAME="jpsr" /opt/traefik/traefik/scripts/update_site.sh
+```
+
+This performs a `docker compose pull` and `docker compose up -d` in the
+`/opt/sites/<SITE_NAME>` directory.
+
+You can automate this via GitHub Actions by having the action SSH into
+the server as `deploy` and run this command after a successful container
+build, or via a cron job if you prefer a pull model.
+
+### 7  Removal (as `deploy`)
+
+To stop and remove the container and its Compose files:
+
+```bash
+SITE_NAME="jpsr" /opt/traefik/traefik/scripts/remove_site.sh
+```
+
+This runs `docker compose down` and deletes `/opt/sites/<SITE_NAME>`.
+
+---
+
+## 🔒 Security & permissions
+
+- The **Docker daemon runs as root**, which is the default on most
+  distributions.  You operate it as the non‑root `deploy` user via the
+  `docker` group.  If you need stricter isolation, consider installing
+  [docker‑socket‑proxy](https://github.com/Tecnativa/docker-socket-proxy)
+  and mounting that into Traefik instead of the raw socket.
+- **Traefik runs as UID 65532** inside the container and does not need
+  root privileges.  Host ports 80/443 are mapped to container ports
+  8080/8443 via Docker’s port publishing.
+- **ACME data is stored in a volume** (`traefik_acme`) rather than on
+  the host filesystem.  Only the `deploy` user can read the `.env`
+  containing your Cloudflare token.
+- **Least privilege:** The Cloudflare API token must only have
+  `Zone.DNS:Edit` and `Zone.Zone:Read` for the zone you’re managing.
+
+---
+
+## 🧩 Credits
+
+This project is maintained by [Josh Phillips](https://joshphillipssr.com).
+Feel free to fork it or use it as a template for your own VitePress site.
