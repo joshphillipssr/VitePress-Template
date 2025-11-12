@@ -34,6 +34,38 @@ listening on high ports (8080/8443) and publishing host ports 80/443.
 
 ---
 
+## 🕸️ Network topology
+
+The deployment uses a simple, secure container network managed by Docker:
+
+- **Traefik** runs on the `traefik_proxy` network and listens internally on ports 8080/8443, publishing to host ports 80/443.
+- **jpsr-site** (this site) runs as a separate container on the same shared network.
+- **Cloudflare** proxies all external traffic and handles DNS + SSL termination with a Let’s Encrypt DNS‑01 challenge via API token.
+- Both Traefik and the site container communicate only through the shared network; the host does not expose other services.
+
+```mermaid
+flowchart LR
+    subgraph Internet
+        CF[Cloudflare DNS + Proxy]
+    end
+
+    subgraph Host
+        direction TB
+        subgraph Docker
+            T[Traefik Container<br>Ports: 8080↔80, 8443↔443]
+            S[Site Container<br>(jpsr-site)]
+            NET[(traefik_proxy network)]
+        end
+    end
+
+    CF <-- 80/443 HTTPS --> T
+    T <-- internal Docker network --> S
+```
+
+This topology isolates application containers from the host OS, allows Traefik to manage routing and certificates centrally, and ensures encrypted end‑to‑end traffic from browser → Cloudflare → Traefik → site container.
+
+---
+
 ## 🏁 Local development
 
 1. **Clone this repository**

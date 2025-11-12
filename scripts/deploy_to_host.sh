@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# deploy_to_host.sh — Bootstrap infra (Traefik) and deploy this site on a Debian host.
+# deploy_to_host.sh — Deploy this site behind an existing Traefik on a Debian host.
 #
 # Required ENV:
 #   CF_API_TOKEN       Cloudflare token (Zone.DNS:Edit + Zone.Zone:Read)
@@ -38,7 +38,7 @@ need_root() {
     # If we're running from a real file, re-exec that file with sudo.
     if [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" && "${BASH_SOURCE[0]}" != "bash" ]]; then
       echo "Re-exec with sudo..."
-      exec sudo --preserve-env=CF_API_TOKEN,EMAIL,SITE_NAME,SITE_HOSTS,SITE_IMAGE,USE_STAGING,TRAEFIK_REPO,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "${BASH_SOURCE[0]}" "$@"
+      exec sudo --preserve-env=CF_API_TOKEN,EMAIL,SITE_NAME,SITE_HOSTS,SITE_IMAGE,USE_STAGING,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "${BASH_SOURCE[0]}" "$@"
     else
       # Running via 'bash -c' (e.g., curl ... | bash or bash -c "$(curl ...)"), there's no file path to re-exec.
       cat >&2 <<'EOF'
@@ -89,11 +89,12 @@ check_network() {
 
 deploy_site() {
   log "Deploying site '${SITE_NAME}' for hosts: ${SITE_HOSTS}"
-  TARGET_DIR="$TARGET_DIR" NETWORK_NAME="$NETWORK_NAME" \
-    bash "$TRAEFIK_DIR/traefik/scripts/deploy_site.sh" \
-      SITE_NAME="$SITE_NAME" \
-      SITE_HOSTS="$SITE_HOSTS" \
-      SITE_IMAGE="$SITE_IMAGE"
+  SITE_NAME="$SITE_NAME" \
+  SITE_HOSTS="$SITE_HOSTS" \
+  SITE_IMAGE="$SITE_IMAGE" \
+  TARGET_DIR="$TARGET_DIR" \
+  NETWORK_NAME="$NETWORK_NAME" \
+  bash "$TRAEFIK_DIR/traefik/scripts/deploy_site.sh"
 }
 
 post_checks() {
