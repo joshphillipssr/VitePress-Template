@@ -5,23 +5,17 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write   # needed to push to GHCR
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write   # needed to push to GHCR
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Debug: show files
-        run: |
-          pwd
-          ls -al
-          test -f Dockerfile && echo "Found Dockerfile" || (echo "NO Dockerfile" && exit 1)
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36,7 +30,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Optional: cache to speed up builds
       - name: Build and push (multi-arch)
         uses: docker/build-push-action@v6
         with:
