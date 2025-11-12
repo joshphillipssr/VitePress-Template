@@ -4,31 +4,25 @@ set -euo pipefail
 # deploy_to_host.sh — Deploy this site behind an existing Traefik on a Debian host.
 #
 # Required ENV:
-#   CF_API_TOKEN       Cloudflare token (Zone.DNS:Edit + Zone.Zone:Read)
-#   EMAIL              Email for Let's Encrypt account
 #   SITE_NAME          Short name for the stack (e.g., jpsr)
 #   SITE_HOSTS         Space-separated hostnames (e.g., "example.com www.example.com")
 #   SITE_IMAGE         Image:tag (e.g., ghcr.io/you/app:latest)
 #
 # Optional ENV:
-#   USE_STAGING=false  Use LE staging CA (true/false)
 #   TRAEFIK_DIR="/opt/traefik"       # path to Traefik helper scripts (already installed)
 #   TARGET_DIR="/opt/sites"          # where per-site compose files live on the host
 #   NETWORK_NAME="traefik_proxy"     # shared docker network
 #
 # Example:
-#   sudo CF_API_TOKEN="..." EMAIL="you@example.com" \
-#        SITE_NAME="jpsr" SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
+#   sudo SITE_NAME="jpsr" \
+#        SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
 #        SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
 #        bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
 
-: "${CF_API_TOKEN:?CF_API_TOKEN required}"
-: "${EMAIL:?EMAIL required}"
 : "${SITE_NAME:?SITE_NAME required}"
 : "${SITE_HOSTS:?SITE_HOSTS required}"
 : "${SITE_IMAGE:?SITE_IMAGE required}"
 
-USE_STAGING="${USE_STAGING:-false}"
 TRAEFIK_DIR="${TRAEFIK_DIR:-/opt/traefik}"
 TARGET_DIR="${TARGET_DIR:-/opt/sites}"
 NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
@@ -38,7 +32,7 @@ need_root() {
     # If we're running from a real file, re-exec that file with sudo.
     if [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" && "${BASH_SOURCE[0]}" != "bash" ]]; then
       echo "Re-exec with sudo..."
-      exec sudo --preserve-env=CF_API_TOKEN,EMAIL,SITE_NAME,SITE_HOSTS,SITE_IMAGE,USE_STAGING,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "${BASH_SOURCE[0]}" "$@"
+      exec sudo --preserve-env=SITE_NAME,SITE_HOSTS,SITE_IMAGE,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "${BASH_SOURCE[0]}" "$@"
     else
       # Running via 'bash -c' (e.g., curl ... | bash or bash -c "$(curl ...)"), there's no file path to re-exec.
       cat >&2 <<'EOF'
@@ -47,8 +41,7 @@ where it cannot re-exec itself (e.g., via `bash -c` or piped stdin).
 
 Please run it like this from a sudo-capable user:
 
-  sudo CF_API_TOKEN="..." EMAIL="..." \
-       SITE_NAME="..." SITE_HOSTS="..." SITE_IMAGE="..." \
+  sudo SITE_NAME="..." SITE_HOSTS="..." SITE_IMAGE="..." \
        bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
 EOF
       exit 1

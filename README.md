@@ -219,6 +219,8 @@ changes if it already exists.
 
 ### 4  Deploy your site (as `deploy`)
 
+This step assumes Traefik is already configured with valid Cloudflare credentials.
+
 To deploy the site container behind Traefik, run the `deploy_to_host.sh`
 script included in this repository.  You must specify the domain names to
 route and the container image tag.  The image is built and published to
@@ -228,24 +230,13 @@ GitHub Container Registry (GHCR) via the CI workflow when you push to
 Run as sudo capable, then switch back:
 
 ```bash
-sudo CF_API_TOKEN="<your cf token>" \
-     EMAIL="you@example.com" \
-     SITE_NAME="jpsr" \
+sudo SITE_NAME="jpsr" \
      SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
      SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
      bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
 ```
 
-What it does:
-
-1. Ensures Docker and the `traefik_proxy` network exist (no sudo needed
-   because `deploy` is in the `docker` group).
-2. Writes `/opt/sites/<SITE_NAME>/docker-compose.yml` containing a single
-   service with your image, attached to the shared network and with
-   Traefik labels for host routing and TLS.
-3. Runs `docker compose up -d` to start the container.
-
-After a few seconds you should see your site served via HTTPS.
+No Cloudflare credentials are required here because Traefik already manages certificate provisioning and renewal.
 
 ### 5  CI build & publish (automatic)
 
