@@ -222,8 +222,7 @@ sudo SITE_REPO="https://github.com/joshphillipssr/joshphillipssr.com.git" \
      bash -c "$(curl -fsSL https://raw.githubusercontent.com/joshphillipssr/joshphillipssr.com/main/scripts/bootstrap_site_on_host.sh)"
 ```
 
-The script clones the repo into `SITE_DIR` if missing or pulls the latest
-changes if it already exists.
+This step **does not deploy the site container yet**. It only prepares the server by cloning this repository and setting permissions so that the `deploy_to_host.sh` script in the next step can use it to generate the container configuration and start the site.
 
 > **Note:**  
 > The script performs privileged actions and may prompt for your password. Once it completes successfully, switch back to the `deploy` user:
@@ -233,6 +232,8 @@ changes if it already exists.
 > ```
 
 ### 4  Deploy your site (as `deploy`)
+
+This is the step that actually deploys your site container using the Docker image built and published by GitHub Actions.
 
 This step assumes Traefik is already configured with valid Cloudflare credentials.
 
@@ -313,3 +314,4 @@ This runs `docker compose down` and deletes `/opt/sites/<SITE_NAME>`.
 
 This project is maintained by [Josh Phillips](https://joshphillipssr.com).
 Feel free to fork it or use it as a template for your own VitePress site.
+</file>
