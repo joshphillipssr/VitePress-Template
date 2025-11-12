@@ -31,10 +31,10 @@ EOF
 fi
 
 if [[ -d "$SITE_DIR/.git" ]]; then
-  echo "Updating site repo in $SITE_DIR"
+  echo "Updating site repo in $SITE_DIR (force sync to origin/main)"
   git -C "$SITE_DIR" fetch --all --prune
-  git -C "$SITE_DIR" switch -q main || true
-  git -C "$SITE_DIR" pull --ff-only
+  git -C "$SITE_DIR" reset --hard origin/main
+  git -C "$SITE_DIR" clean -fd
 else
   echo "Cloning site repo to $SITE_DIR"
   git clone "$SITE_REPO" "$SITE_DIR"
