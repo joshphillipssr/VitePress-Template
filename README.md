@@ -165,9 +165,12 @@ docker compose -f traefik/docker-compose.yml --env-file traefik/.env up -d
 > docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}"
 > ```
 
-### 3  Prepare the site (as `deploy`)
+### 3  Prepare the site (as a sudo‑capable user)
+
+Run this step as your sudo‑capable user (for example, `josh`), since the bootstrap script requires elevated privileges to create directories under `/opt` and adjust permissions. After it finishes, switch back to the `deploy` user for all remaining steps.
 
 ```bash
+SITE_REPO="https://github.com/joshphillipssr/joshphillipssr.com.git" \
 SITE_DIR="/opt/joshphillipssr.com" \
 bash -c "$(curl -fsSL \
   https://raw.githubusercontent.com/joshphillipssr/joshphillipssr.com/main/scripts/bootstrap_site_on_host.sh)"
@@ -175,6 +178,13 @@ bash -c "$(curl -fsSL \
 
 The script clones the repo into `SITE_DIR` if missing or pulls the latest
 changes if it already exists.
+
+> **Note:**  
+> The script performs privileged actions and may prompt for your password. Once it completes successfully, switch back to the `deploy` user:
+>
+> ```bash
+> sudo -iu deploy
+> ```
 
 ### 4  Deploy your site (as `deploy`)
 
