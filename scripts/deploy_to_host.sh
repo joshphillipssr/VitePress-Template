@@ -90,7 +90,7 @@ check_network() {
 deploy_site() {
   log "Deploying site '${SITE_NAME}' for hosts: ${SITE_HOSTS}"
   TARGET_DIR="$TARGET_DIR" NETWORK_NAME="$NETWORK_NAME" \
-    "$TRAEFIK_DIR/traefik/scripts/deploy_site.sh" \
+    bash "$TRAEFIK_DIR/traefik/scripts/deploy_site.sh" \
       SITE_NAME="$SITE_NAME" \
       SITE_HOSTS="$SITE_HOSTS" \
       SITE_IMAGE="$SITE_IMAGE"
