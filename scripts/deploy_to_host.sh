@@ -82,12 +82,56 @@ check_network() {
 
 deploy_site() {
   log "Deploying site '${SITE_NAME}' for hosts: ${SITE_HOSTS}"
-  SITE_NAME="$SITE_NAME" \
-  SITE_HOSTS="$SITE_HOSTS" \
-  SITE_IMAGE="$SITE_IMAGE" \
-  TARGET_DIR="$TARGET_DIR" \
-  NETWORK_NAME="$NETWORK_NAME" \
-  bash "$TRAEFIK_DIR/traefik/scripts/deploy_site.sh"
+  local SITE_DIR="${TARGET_DIR}/${SITE_NAME}"
+  mkdir -p "${SITE_DIR}"
+
+  # Primary host for curl hint
+  local PRIMARY_HOST
+  PRIMARY_HOST="$(echo "$SITE_HOSTS" | awk '{print $1}')"
+
+  # Build a Traefik Host() rule using OR syntax
+  local RULE_HOSTS=""
+  for h in ${SITE_HOSTS}; do
+    if [[ -z "${RULE_HOSTS}" ]]; then
+      RULE_HOSTS="Host(\`${h}\`)"
+    else
+      RULE_HOSTS="${RULE_HOSTS} || Host(\`${h}\`)"
+    fi
+  done
+
+  log "Writing ${SITE_DIR}/docker-compose.yml ..."
+  cat > "${SITE_DIR}/docker-compose.yml" <<YAML
+version: "3.9"
+
+services:
+  ${SITE_NAME}:
+    image: ${SITE_IMAGE}
+    container_name: ${SITE_NAME}
+    restart: unless-stopped
+    networks:
+      - ${NETWORK_NAME}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${SITE_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${SITE_NAME}.tls=true"
+      - "traefik.http.routers.${SITE_NAME}.tls.certresolver=cf"
+      - "traefik.http.routers.${SITE_NAME}.rule=${RULE_HOSTS}"
+      - "traefik.http.routers.${SITE_NAME}.service=${SITE_NAME}"
+      - "traefik.http.services.${SITE_NAME}.loadbalancer.server.port=80"
+
+networks:
+  ${NETWORK_NAME}:
+    external: true
+YAML
+
+  log "Bringing up ${SITE_NAME} ..."
+  docker compose -f "${SITE_DIR}/docker-compose.yml" up -d
+  log "✅ Deployed ${SITE_NAME} for hosts: ${SITE_HOSTS}"
+
+  log "Active containers"
+  docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  echo
+  echo "Try:   curl -I https://${PRIMARY_HOST}"
 }
 
 post_checks() {
