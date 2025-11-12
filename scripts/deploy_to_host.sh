@@ -12,8 +12,7 @@ set -euo pipefail
 #
 # Optional ENV:
 #   USE_STAGING=false  Use LE staging CA (true/false)
-#   TRAEFIK_REPO="https://github.com/joshphillipssr/Traefik-Deployment.git"
-#   TRAEFIK_DIR="/opt/traefik"       # where the infra repo will live on the host
+#   TRAEFIK_DIR="/opt/traefik"       # path to Traefik helper scripts (already installed)
 #   TARGET_DIR="/opt/sites"          # where per-site compose files live on the host
 #   NETWORK_NAME="traefik_proxy"     # shared docker network
 #
@@ -21,7 +20,7 @@ set -euo pipefail
 #   sudo CF_API_TOKEN="..." EMAIL="you@example.com" \
 #        SITE_NAME="jpsr" SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
 #        SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
-#        ./scripts/deploy_to_host.sh
+#        bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
 
 : "${CF_API_TOKEN:?CF_API_TOKEN required}"
 : "${EMAIL:?EMAIL required}"
@@ -30,15 +29,30 @@ set -euo pipefail
 : "${SITE_IMAGE:?SITE_IMAGE required}"
 
 USE_STAGING="${USE_STAGING:-false}"
-TRAEFIK_REPO="${TRAEFIK_REPO:-https://github.com/joshphillipssr/Traefik-Deployment.git}"
 TRAEFIK_DIR="${TRAEFIK_DIR:-/opt/traefik}"
 TARGET_DIR="${TARGET_DIR:-/opt/sites}"
 NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
 
 need_root() {
   if [[ $EUID -ne 0 ]]; then
-    echo "Re-exec with sudo..."
-    exec sudo --preserve-env=CF_API_TOKEN,EMAIL,SITE_NAME,SITE_HOSTS,SITE_IMAGE,USE_STAGING,TRAEFIK_REPO,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "$0" "$@"
+    # If we're running from a real file, re-exec that file with sudo.
+    if [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" && "${BASH_SOURCE[0]}" != "bash" ]]; then
+      echo "Re-exec with sudo..."
+      exec sudo --preserve-env=CF_API_TOKEN,EMAIL,SITE_NAME,SITE_HOSTS,SITE_IMAGE,USE_STAGING,TRAEFIK_REPO,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "${BASH_SOURCE[0]}" "$@"
+    else
+      # Running via 'bash -c' (e.g., curl ... | bash or bash -c "$(curl ...)"), there's no file path to re-exec.
+      cat >&2 <<'EOF'
+This deployment script needs root privileges but was invoked without sudo in a mode
+where it cannot re-exec itself (e.g., via `bash -c` or piped stdin).
+
+Please run it like this from a sudo-capable user:
+
+  sudo CF_API_TOKEN="..." EMAIL="..." \
+       SITE_NAME="..." SITE_HOSTS="..." SITE_IMAGE="..." \
+       bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
+EOF
+      exit 1
+    fi
   fi
 }
 need_root
@@ -63,26 +77,14 @@ ensure_docker() {
   systemctl enable --now docker
 }
 
-clone_or_update_infra() {
-  if [[ -d "$TRAEFIK_DIR/.git" ]]; then
-    log "Updating Traefik-Deployment repo in $TRAEFIK_DIR"
-    git -C "$TRAEFIK_DIR" fetch --all --prune
-    git -C "$TRAEFIK_DIR" switch -q main || true
-    git -C "$TRAEFIK_DIR" pull --ff-only
-  else
-    log "Cloning Traefik-Deployment to $TRAEFIK_DIR"
-    git clone "$TRAEFIK_REPO" "$TRAEFIK_DIR"
+check_network() {
+  if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
+    echo "Error: Docker network '$NETWORK_NAME' not found."
+    echo "Traefik must already be deployed and the shared network created."
+    echo "Create the network with your Traefik repo, e.g.:"
+    echo "  NETWORK_NAME=\"$NETWORK_NAME\" \"$TRAEFIK_DIR/traefik/scripts/create_network.sh\""
+    exit 1
   fi
-  chmod +x "$TRAEFIK_DIR"/traefik/scripts/*.sh
-}
-
-bring_up_traefik() {
-  log "Creating shared Docker network ($NETWORK_NAME)"
-  NETWORK_NAME="$NETWORK_NAME" "$TRAEFIK_DIR/traefik/scripts/create_network.sh"
-
-  log "Starting Traefik (staging=${USE_STAGING})"
-  CF_API_TOKEN="$CF_API_TOKEN" EMAIL="$EMAIL" USE_STAGING="$USE_STAGING" \
-    "$TRAEFIK_DIR/traefik/scripts/traefik_up.sh"
 }
 
 deploy_site() {
@@ -102,8 +104,7 @@ post_checks() {
 }
 
 ensure_docker
-clone_or_update_infra
-bring_up_traefik
+check_network
 deploy_site
 post_checks
 

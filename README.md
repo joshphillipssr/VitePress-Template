@@ -170,10 +170,9 @@ docker compose -f traefik/docker-compose.yml --env-file traefik/.env up -d
 Run this step as your sudo‑capable user (for example, `josh`), since the bootstrap script requires elevated privileges to create directories under `/opt` and adjust permissions. After it finishes, switch back to the `deploy` user for all remaining steps.
 
 ```bash
-SITE_REPO="https://github.com/joshphillipssr/joshphillipssr.com.git" \
-SITE_DIR="/opt/joshphillipssr.com" \
-bash -c "$(curl -fsSL \
-  https://raw.githubusercontent.com/joshphillipssr/joshphillipssr.com/main/scripts/bootstrap_site_on_host.sh)"
+sudo SITE_REPO="https://github.com/joshphillipssr/joshphillipssr.com.git" \
+     SITE_DIR="/opt/joshphillipssr.com" \
+     bash -c "$(curl -fsSL https://raw.githubusercontent.com/joshphillipssr/joshphillipssr.com/main/scripts/bootstrap_site_on_host.sh)"
 ```
 
 The script clones the repo into `SITE_DIR` if missing or pulls the latest
@@ -194,13 +193,15 @@ route and the container image tag.  The image is built and published to
 GitHub Container Registry (GHCR) via the CI workflow when you push to
 `main`.
 
+Run as sudo capable, then switch back:
+
 ```bash
-CF_API_TOKEN="<your cf token>" \
-EMAIL="you@example.com" \
-SITE_NAME="jpsr" \
-SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
-SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
-bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
+sudo CF_API_TOKEN="<your cf token>" \
+     EMAIL="you@example.com" \
+     SITE_NAME="jpsr" \
+     SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
+     SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
+     bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
 ```
 
 What it does:
