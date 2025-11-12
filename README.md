@@ -52,8 +52,8 @@ flowchart LR
     subgraph Host
         direction TB
         subgraph Docker
-            T[Traefik Container<br>Ports: 8080↔80, 8443↔443]
-            S[Site Container<br>(jpsr-site)]
+            T["Traefik Container\nPorts: 8080↔80, 8443↔443"]
+            S["Site Container\n(jpsr-site)"]
             NET[(traefik_proxy network)]
         end
     end
