@@ -119,7 +119,7 @@ opinionated for simplicity; you can always adapt it later.
 
 - Create a Cloudflare API token with **Zone.DNS:Edit** and
   **Zone.Zone:Read** for your domain.
-- Create `A`/`AAAA` records for `joshphillipssr.com` and `www` pointing to
+- Create `A`/`AAAA` records for `yourdomain.com` and `www` pointing to
   your server’s IP.  Enable the Cloudflare proxy (**orange cloud on**).
 - Under *SSL/TLS → Overview* set the mode to **Full (strict)**.
 
@@ -172,13 +172,18 @@ su - deploy
 - `NETWORK_NAME` – defaults to `traefik_proxy` and rarely needs to be
   overridden.
 
-The script creates a `.env` file for Traefik, ensures the Docker network
-exists, optionally writes a Compose override to use the staging ACME
-endpoint, and then runs:
+To start Traefik for the first time, provide these variables inline when running the setup script. This command will automatically create `/opt/traefik/traefik/.env` for future use and launch Traefik via Docker Compose:
 
 ```bash
-docker compose -f traefik/docker-compose.yml --env-file traefik/.env up -d
+CF_API_TOKEN="your_cf_token_here" \
+EMAIL="you@example.com" \
+USE_STAGING=false \
+/opt/traefik/traefik/scripts/traefik_up.sh
 ```
+
+The script creates a `.env` file for Traefik, ensures the Docker network
+exists, and optionally writes a Compose override to use the staging ACME
+endpoint. It will automatically invoke Docker Compose to bring Traefik online.
 
 > **Troubleshooting:**  
 > If you see `Permission denied` when running the script, set execute permissions:
