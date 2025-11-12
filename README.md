@@ -87,7 +87,17 @@ This topology isolates application containers from the host OS, allows Traefik t
    yarn docs:dev
    ```
 
-4. **Build for production**
+4. **Test the local development environment**
+
+   Once the server starts, open your browser and navigate to:
+
+   ```text
+   http://localhost:5175
+   ```
+
+   You should see the local development version of your site running.
+
+5. **Build for production**
 
    ```bash
    yarn docs:build
