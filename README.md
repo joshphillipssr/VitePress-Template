@@ -105,22 +105,23 @@ What the script does:
 After running it, **switch to the `deploy` user**:
 
 ```bash
-sudo -iu deploy
+su - deploy
 ```
+
+> **Tip:**  
+> If you can’t use `su - deploy` because the account has no password, use:
+>
+> ```bash
+> sudo -iu deploy
+> ```
+>
+> or to run a single command as that user:
+>
+> ```bash
+> sudo -u deploy -- <command>
+> ```
 
 ### 2  Start Traefik (as `deploy`)
-
-Run the `traefik_up.sh` script from the Traefik repo to bring up
-Traefik.  This uses Docker Compose with a named volume for ACME data and
-publishes ports 80 and 443 on the host while Traefik listens on 8080/8443
-inside the container.
-
-```bash
-CF_API_TOKEN="<your cf token>" \
-EMAIL="you@example.com" \
-USE_STAGING=false \
-/opt/traefik/traefik/scripts/traefik_up.sh
-```
 
 - `CF_API_TOKEN` – your Cloudflare token from step 0.
 - `EMAIL` – email for Let’s Encrypt registration and expiry notices.
@@ -137,18 +138,36 @@ endpoint, and then runs:
 docker compose -f traefik/docker-compose.yml --env-file traefik/.env up -d
 ```
 
-Traefik runs as UID `65532` inside the container, the ACME certificates
-are stored in a Docker volume (`traefik_acme`), and the Docker socket is
-mounted read‑only.
+> **Troubleshooting:**  
+> If you see `Permission denied` when running the script, set execute permissions:
+>
+> ```bash
+> chmod +x /opt/traefik/traefik/scripts/*.sh
+> ```
+>
+> If you see a YAML error such as `mapping values are not allowed in this context`, your Traefik compose file is likely outdated or mis‑indented.  
+> The latest version in the repo replaces the Nginx example with a correct Traefik v3 configuration. Validate with:
+>
+> ```bash
+> cd /opt/traefik/traefik
+> docker compose -f docker-compose.yml config
+> ```
+>
+> On success, you’ll see:
+>
+> ```bash
+> Traefik is up (host 80→8080, 443→8443; staging=false).
+> ```
+>
+> Confirm:
+>
+> ```bash
+> docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}"
+> ```
 
-### 3  Bootstrap the site repository on the host (as `deploy`)
-
-Download or update the site code into a working directory on the server.
-A helper script `bootstrap_site_on_host.sh` in this repository does the
-work:
+### 3  Prepare the site (as `deploy`)
 
 ```bash
-SITE_REPO="https://github.com/joshphillipssr/joshphillipssr.com.git" \
 SITE_DIR="/opt/joshphillipssr.com" \
 bash -c "$(curl -fsSL \
   https://raw.githubusercontent.com/joshphillipssr/joshphillipssr.com/main/scripts/bootstrap_site_on_host.sh)"
