@@ -2,4 +2,4 @@
 
 This is the home page for joshphillipssr.com  
 
-Content will be added here. Very soon.
+Content will be added here. Very soon. Like...now.
