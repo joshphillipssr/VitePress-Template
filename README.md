@@ -1,4 +1,4 @@
-# joshphillipssr.com
+# VitePress Template
 
 A clean, modern **VitePress**‑based documentation and portfolio site.  The
 repository powers [https://joshphillipssr.com](https://joshphillipssr.com) and is
