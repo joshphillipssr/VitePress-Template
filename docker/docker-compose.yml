@@ -1,19 +1,21 @@
-# Build the VitePress site
-FROM node:20-alpine AS builder
-WORKDIR /app
+version: "3.9"
 
-# Install deps first (better cache)
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
+services:
+	site:
+		image: ghcr.io/your-org/your-site:latest
+		container_name: your-site
+		restart: unless-stopped
+		networks:
+			- traefik_proxy
+		labels:
+			- "traefik.enable=true"
+			- "traefik.http.routers.your-site.entrypoints=websecure"
+			- "traefik.http.routers.your-site.tls=true"
+			- "traefik.http.routers.your-site.tls.certresolver=cf"
+			- "traefik.http.routers.your-site.rule=Host(`example.com`) || Host(`www.example.com`)"
+			- "traefik.http.routers.your-site.service=your-site"
+			- "traefik.http.services.your-site.loadbalancer.server.port=80"
 
-# Copy the rest and build
-COPY . .
-# Expect scripts:
-#   "docs:build": "vitepress build"
-RUN yarn docs:build
-
-# Serve with nginx
-FROM nginx:alpine
-COPY --from=builder /app/docs/.vitepress/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+networks:
+	traefik_proxy:
+		external: true
