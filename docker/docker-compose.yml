@@ -1,21 +1,19 @@
-version: "3.9"
-
 services:
-	site:
-		image: ghcr.io/your-org/your-site:latest
-		container_name: your-site
-		restart: unless-stopped
-		networks:
-			- traefik_proxy
-		labels:
-			- "traefik.enable=true"
-			- "traefik.http.routers.your-site.entrypoints=websecure"
-			- "traefik.http.routers.your-site.tls=true"
-			- "traefik.http.routers.your-site.tls.certresolver=cf"
-			- "traefik.http.routers.your-site.rule=Host(`example.com`) || Host(`www.example.com`)"
-			- "traefik.http.routers.your-site.service=your-site"
-			- "traefik.http.services.your-site.loadbalancer.server.port=80"
+  site:
+    image: ghcr.io/example/docs:latest
+    container_name: docs
+    restart: unless-stopped
+    networks:
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.docs.entrypoints=websecure"
+      - "traefik.http.routers.docs.tls=true"
+      - "traefik.http.routers.docs.tls.certresolver=cf"
+      - "traefik.http.routers.docs.rule=Host(`docs.example.com`) || Host(`www.docs.example.com`)"
+      - "traefik.http.routers.docs.service=docs"
+      - "traefik.http.services.docs.loadbalancer.server.port=80"
 
 networks:
-	traefik_proxy:
-		external: true
+  traefik_proxy:
+    external: true

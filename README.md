@@ -1,152 +1,94 @@
 # VitePress Template
 
-A clean, modern **VitePress**‑based documentation and portfolio template. Use
-this repo as‑is or click **Use this template** on GitHub to create your own
-site repository, then deploy behind an existing Traefik stack.
+Reusable VitePress template designed for deployment behind Traefik.
 
-This README covers what the template is, how to work with it locally, and how
-it fits into a Traefik‑based deployment. For a step‑by‑step guide that walks
-through creating a new repo (like `joshphillipssr.com`), building the image,
-and deploying to a Linux VPS that already runs Traefik from the
-Traefik‑Deployment repo, see **Quick-Start.md**.
+This repository is intended to be used with **GitHub "Use this template"** to create a derived site repository, then deployed on a host where Traefik is already managed by [Traefik-Deployment](https://github.com/joshphillipssr/Traefik-Deployment).
 
----
+For copy/paste operator steps, see [Quick-Start.md](Quick-Start.md).
 
-## 🚀 Features
+## What This Template Includes
 
-- ⚡️ Built with [VitePress](https://vitepress.dev)
-- 🎨 Clean sidebar‑only theme (no top navigation)
-- 📄 Easy Markdown‑based content structure
-- 🧱 Designed for personal portfolios, documentation sites or project wikis
-- ☁️ Deployment via Docker + Traefik, with automatic HTTPS using Let’s Encrypt
-  DNS‑01 challenge through Cloudflare
+- VitePress docs scaffold (`docs/`)
+- Multi-stage Docker build (`Dockerfile`)
+- GHCR build/push workflow (`.github/workflows/build-and-push.yml`)
+- Host deployment scripts (`scripts/`)
+- Deployment config contract (`site.env.example`)
 
----
+## Deployment Model
 
-## 🧰 Tech stack
+Expected host layout:
 
-- **Framework:** VitePress (`vitepress@latest`)
-- **Languages:** TypeScript / Markdown
-- **Package manager:** Yarn
-- **Hosting example:** Debian 12 with Docker and Traefik
-
-The template keeps domains and secrets out of the codebase—everything is
-injected via environment variables at deploy time.
-
----
-
-## 🕸️ Network topology
-
-The deployment uses a simple, secure container network managed by Docker:
-
-- **Traefik** runs on the `traefik_proxy` network and listens internally on ports 8080/8443, publishing to host ports 80/443.
-- **Site container** runs as a separate service on the same shared network.
-- **Cloudflare** proxies all external traffic and handles DNS + SSL termination with a Let’s Encrypt DNS‑01 challenge via API token.
-- Both Traefik and the site container communicate only through the shared network; the host does not expose other services.
-
-```mermaid
-flowchart LR
-    subgraph Internet
-        CF[Cloudflare DNS + Proxy]
-    end
-
-    subgraph Host
-        direction TB
-        subgraph Docker
-            T["Traefik Container\nPorts: 8080↔80, 8443↔443"]
-            S["Site Container\n(jpsr-site)"]
-            NET[(traefik_proxy network)]
-        end
-    end
-
-    CF <-- 80/443 HTTPS --> T
-    T <-- internal Docker network --> S
+```text
+/opt/traefik/        # Traefik-Deployment repository and scripts
+/opt/sites/<name>/   # Derived site repository + generated compose
 ```
 
-This topology isolates application containers from the host OS, allows Traefik to manage routing and certificates centrally, and ensures encrypted end‑to‑end traffic from browser → Cloudflare → Traefik → site container.
+Expected shared network:
 
----
+```text
+traefik_proxy
+```
 
-## 🏁 Local development
+## Configuration Contract
 
-1. **Clone this repository**
+Copy `site.env.example` to `site.env` in the derived site repository and fill values.
 
-   ```bash
-  git clone https://github.com/joshphillipssr/VitePress-Template.git
-  cd VitePress-Template
-   ```
+Required variables:
 
-2. **Install dependencies**
+```text
+SITE_NAME
+SITE_HOSTS
+SITE_IMAGE
+```
 
-   ```bash
-   yarn install
-   ```
+Common optional variables:
 
-3. **Start local dev server**
+```text
+SITE_PORT=80
+TARGET_DIR=/opt/sites
+NETWORK_NAME=traefik_proxy
+ENTRYPOINTS=websecure
+CERT_RESOLVER=cf
+MIDDLEWARES=
+DEPLOY_NOW=true
+FORCE=false
+```
 
-   ```bash
-   yarn docs:dev
-   ```
+`site.env` is gitignored by default.
 
-4. **Test the local development environment**
+## Script Responsibilities
 
-   Once the server starts, open your browser and navigate to:
+- `scripts/bootstrap_site_on_host.sh`
+  - Clones or updates a derived repository on the host.
+  - Supports `SITE_REPO`, `SITE_NAME`, `SITE_DIR`, `SITE_REF`, `DEPLOY_USER`.
+  - Creates `site.env` from `site.env.example` when missing.
 
-   ```text
-   http://localhost:5175
-   ```
+- `scripts/deploy_to_host.sh`
+  - Loads config from `site.env` (or `ENV_FILE`).
+  - Validates required variables.
+  - Generates `/opt/sites/<SITE_NAME>/docker-compose.yml`.
+  - Applies Traefik host-based labels and deploys with Docker Compose.
 
-   You should see the local development version of your site running.
+- `scripts/update_site.sh`
+  - Pulls latest image and recreates the site container.
 
-5. **Build for production**
+- `scripts/cleanup.sh`
+  - Stops/removes the site stack and deletes generated site directory.
 
-   ```bash
-   yarn docs:build
-   ```
+## Generated Traefik Labels
 
-   The generated static files live in `docs/.vitepress/dist`.
+`deploy_to_host.sh` writes labels in this pattern:
 
-These steps are useful if you want to work on the site’s content or styling.
+```text
+traefik.enable=true
+traefik.http.routers.<SITE_NAME>.entrypoints=websecure
+traefik.http.routers.<SITE_NAME>.tls=true
+traefik.http.routers.<SITE_NAME>.tls.certresolver=cf
+traefik.http.routers.<SITE_NAME>.rule=Host(`<host1>`) || Host(`<host2>`)
+traefik.http.services.<SITE_NAME>.loadbalancer.server.port=<SITE_PORT>
+```
 
----
+## Maintenance Guidance
 
-## 🌍 Deployment (overview)
-
-This template is designed to run behind the Traefik stack from the
-[Traefik-Deployment](https://github.com/joshphillipssr/Traefik-Deployment) repo.
-Deployment is done via Docker images (built by GitHub Actions) and simple host
-scripts. The high-level flow is:
-
-- You create your own repository from this template.
-- GitHub Actions builds and pushes a Docker image to GHCR.
-- On the Traefik host, you bootstrap the repo under `/opt/sites/<name>`.
-- You deploy with `scripts/deploy_to_host.sh`, which wires Traefik labels and
-  brings the container up on the shared `traefik_proxy` network.
-
-Full, copy/pasteable steps live in [Quick-Start.md](Quick-Start.md).
-
----
-
-## 🔒 Security & permissions
-
-- The **Docker daemon runs as root**, which is the default on most
-  distributions.  You operate it as the non‑root `deploy` user via the
-  `docker` group.  If you need stricter isolation, consider installing
-  [docker‑socket‑proxy](https://github.com/Tecnativa/docker-socket-proxy)
-  and mounting that into Traefik instead of the raw socket.
-- **Traefik runs as UID 65532** inside the container and does not need
-  root privileges.  Host ports 80/443 are mapped to container ports
-  8080/8443 via Docker’s port publishing.
-- **ACME data is stored in a volume** (`traefik_acme`) rather than on
-  the host filesystem.  Only the `deploy` user can read the `.env`
-  containing your Cloudflare token.
-- **Least privilege:** The Cloudflare API token must only have
-  `Zone.DNS:Edit` and `Zone.Zone:Read` for the zone you’re managing.
-
----
-
-## 🧩 Credits
-
-This project is maintained by [Josh Phillips](https://joshphillipssr.com).
-Feel free to fork it or use it as a template for your own VitePress site.
-</file>
+- Template update strategy for derived repos: [MAINTENANCE.md](MAINTENANCE.md)
+- Operator runbook checklist: [DEPLOYMENT-CHECKLIST.md](DEPLOYMENT-CHECKLIST.md)

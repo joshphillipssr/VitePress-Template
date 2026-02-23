@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://joshphillipssr.com/sitemap.xml
+# Update this to your deployed site hostname.
+Sitemap: https://example.com/sitemap.xml

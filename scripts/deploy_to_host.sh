@@ -1,108 +1,208 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# deploy_to_host.sh
+# Generate a Traefik-aware compose file for this site and deploy/update it.
 #
-# deploy_to_host.sh — Deploy this site behind an existing Traefik on a Debian host.
+# Config loading order:
+#   1) Existing shell environment
+#   2) ENV_FILE (default: <repo-root>/site.env)
+#   3) Existing shell environment values are re-applied (explicit override)
 #
-# Required ENV:
-#   SITE_NAME          Short name for the stack (e.g., jpsr)
-#   SITE_HOSTS         Space-separated hostnames (e.g., "example.com www.example.com")
-#   SITE_IMAGE         Image:tag (e.g., ghcr.io/you/app:latest)
+# Required:
+#   SITE_NAME      short identifier for compose/router/service names
+#   SITE_HOSTS     space-separated hostnames (example.com www.example.com)
+#   SITE_IMAGE     image reference (ghcr.io/owner/repo:latest)
 #
-# Optional ENV:
-#   TRAEFIK_DIR="/opt/traefik"       # path to Traefik helper scripts (already installed)
-#   TARGET_DIR="/opt/sites"          # where per-site compose files live on the host
-#   NETWORK_NAME="traefik_proxy"     # shared docker network
-#
-# Example:
-#   sudo SITE_NAME="jpsr" \
-#        SITE_HOSTS="joshphillipssr.com www.joshphillipssr.com" \
-#        SITE_IMAGE="ghcr.io/joshphillipssr/jpsr-site:latest" \
-#        bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
+# Optional:
+#   SITE_PORT      container port served by app (default: 80)
+#   TARGET_DIR     host directory for generated compose (default: /opt/sites)
+#   NETWORK_NAME   shared Traefik network (default: traefik_proxy)
+#   ENTRYPOINTS    Traefik entrypoints (default: websecure)
+#   CERT_RESOLVER  Traefik cert resolver (default: cf)
+#   MIDDLEWARES    optional comma-separated middleware chain
+#   DEPLOY_NOW     true/false (default: true)
+#   FORCE          true/false overwrite existing compose (default: false)
 
-: "${SITE_NAME:?SITE_NAME required}"
-: "${SITE_HOSTS:?SITE_HOSTS required}"
-: "${SITE_IMAGE:?SITE_IMAGE required}"
-
-TRAEFIK_DIR="${TRAEFIK_DIR:-/opt/traefik}"
-TARGET_DIR="${TARGET_DIR:-/opt/sites}"
-NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
-
-need_root() {
-  if [[ $EUID -ne 0 ]]; then
-    # If we're running from a real file, re-exec that file with sudo.
-    if [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" && "${BASH_SOURCE[0]}" != "bash" ]]; then
-      echo "Re-exec with sudo..."
-      exec sudo --preserve-env=SITE_NAME,SITE_HOSTS,SITE_IMAGE,TRAEFIK_DIR,TARGET_DIR,NETWORK_NAME "${BASH_SOURCE[0]}" "$@"
-    else
-      # Running via 'bash -c' (e.g., curl ... | bash or bash -c "$(curl ...)"), there's no file path to re-exec.
-      cat >&2 <<'EOF'
-This deployment script needs root privileges but was invoked without sudo in a mode
-where it cannot re-exec itself (e.g., via `bash -c` or piped stdin).
-
-Please run it like this from a sudo-capable user:
-
-  sudo SITE_NAME="..." SITE_HOSTS="..." SITE_IMAGE="..." \
-       bash /opt/joshphillipssr.com/scripts/deploy_to_host.sh
-EOF
-      exit 1
-    fi
-  fi
-}
-need_root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_FILE="${ENV_FILE:-${REPO_ROOT}/site.env}"
 
 log() { printf "\n==> %s\n" "$*"; }
 
-ensure_docker() {
-  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    log "Docker present"
-    return
-  fi
-  log "Installing Docker (Debian)"
-  apt-get update
-  apt-get -y install ca-certificates curl gnupg lsb-release
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update
-  apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  systemctl enable --now docker
+usage() {
+  cat <<EOF
+Usage:
+  ENV_FILE=/opt/sites/<site>/site.env ${BASH_SOURCE[0]}
+
+Required:
+  SITE_NAME
+  SITE_HOSTS
+  SITE_IMAGE
+
+Optional:
+  SITE_PORT=80
+  TARGET_DIR=/opt/sites
+  NETWORK_NAME=traefik_proxy
+  ENTRYPOINTS=websecure
+  CERT_RESOLVER=cf
+  MIDDLEWARES=
+  DEPLOY_NOW=true
+  FORCE=false
+EOF
 }
 
-check_network() {
-  if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
-    echo "Error: Docker network '$NETWORK_NAME' not found."
-    echo "Traefik must already be deployed and the shared network created."
-    echo "Create the network with your Traefik repo, e.g.:"
-    echo "  NETWORK_NAME=\"$NETWORK_NAME\" \"$TRAEFIK_DIR/traefik/scripts/create_network.sh\""
+is_true() {
+  case "${1:-}" in
+    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Yy]|[Oo][Nn]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+load_env() {
+  # Preserve explicit environment values before sourcing file.
+  local pre_site_name="${SITE_NAME-}"
+  local pre_site_hosts="${SITE_HOSTS-}"
+  local pre_site_image="${SITE_IMAGE-}"
+  local pre_site_port="${SITE_PORT-}"
+  local pre_target_dir="${TARGET_DIR-}"
+  local pre_network_name="${NETWORK_NAME-}"
+  local pre_entrypoints="${ENTRYPOINTS-}"
+  local pre_cert_resolver="${CERT_RESOLVER-}"
+  local pre_middlewares="${MIDDLEWARES-}"
+  local pre_deploy_now="${DEPLOY_NOW-}"
+  local pre_force="${FORCE-}"
+
+  local has_site_name="${SITE_NAME+x}"
+  local has_site_hosts="${SITE_HOSTS+x}"
+  local has_site_image="${SITE_IMAGE+x}"
+  local has_site_port="${SITE_PORT+x}"
+  local has_target_dir="${TARGET_DIR+x}"
+  local has_network_name="${NETWORK_NAME+x}"
+  local has_entrypoints="${ENTRYPOINTS+x}"
+  local has_cert_resolver="${CERT_RESOLVER+x}"
+  local has_middlewares="${MIDDLEWARES+x}"
+  local has_deploy_now="${DEPLOY_NOW+x}"
+  local has_force="${FORCE+x}"
+
+  if [[ -f "$ENV_FILE" ]]; then
+    log "Loading config from ${ENV_FILE}"
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+  else
+    log "No ENV_FILE found at ${ENV_FILE}; using shell environment/defaults"
+  fi
+
+  if [[ -n "$has_site_name" ]]; then SITE_NAME="$pre_site_name"; fi
+  if [[ -n "$has_site_hosts" ]]; then SITE_HOSTS="$pre_site_hosts"; fi
+  if [[ -n "$has_site_image" ]]; then SITE_IMAGE="$pre_site_image"; fi
+  if [[ -n "$has_site_port" ]]; then SITE_PORT="$pre_site_port"; fi
+  if [[ -n "$has_target_dir" ]]; then TARGET_DIR="$pre_target_dir"; fi
+  if [[ -n "$has_network_name" ]]; then NETWORK_NAME="$pre_network_name"; fi
+  if [[ -n "$has_entrypoints" ]]; then ENTRYPOINTS="$pre_entrypoints"; fi
+  if [[ -n "$has_cert_resolver" ]]; then CERT_RESOLVER="$pre_cert_resolver"; fi
+  if [[ -n "$has_middlewares" ]]; then MIDDLEWARES="$pre_middlewares"; fi
+  if [[ -n "$has_deploy_now" ]]; then DEPLOY_NOW="$pre_deploy_now"; fi
+  if [[ -n "$has_force" ]]; then FORCE="$pre_force"; fi
+}
+
+apply_defaults() {
+  SITE_PORT="${SITE_PORT:-80}"
+  TARGET_DIR="${TARGET_DIR:-/opt/sites}"
+  NETWORK_NAME="${NETWORK_NAME:-traefik_proxy}"
+  ENTRYPOINTS="${ENTRYPOINTS:-websecure}"
+  CERT_RESOLVER="${CERT_RESOLVER:-cf}"
+  MIDDLEWARES="${MIDDLEWARES:-}"
+  DEPLOY_NOW="${DEPLOY_NOW:-true}"
+  FORCE="${FORCE:-false}"
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Missing required command: $1" >&2
+    exit 1
+  }
+}
+
+validate_inputs() {
+  if [[ -z "${SITE_NAME:-}" || -z "${SITE_HOSTS:-}" || -z "${SITE_IMAGE:-}" ]]; then
+    usage >&2
+    exit 1
+  fi
+
+  if [[ ! "${SITE_NAME:-}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "SITE_NAME must match ^[a-z0-9][a-z0-9-]*$ (got: ${SITE_NAME})" >&2
+    exit 1
+  fi
+
+  if [[ ! "${SITE_PORT:-}" =~ ^[0-9]+$ ]]; then
+    echo "SITE_PORT must be numeric (got: ${SITE_PORT})" >&2
+    exit 1
+  fi
+
+  # shellcheck disable=SC2206
+  SITE_HOSTS_ARRAY=($SITE_HOSTS)
+  if [[ ${#SITE_HOSTS_ARRAY[@]} -eq 0 ]]; then
+    echo "SITE_HOSTS must include at least one hostname." >&2
+    exit 1
+  fi
+
+  local host
+  for host in "${SITE_HOSTS_ARRAY[@]}"; do
+    if [[ ! "$host" =~ ^[A-Za-z0-9.-]+$ ]]; then
+      echo "Invalid hostname in SITE_HOSTS: ${host}" >&2
+      exit 1
+    fi
+  done
+}
+
+ensure_docker() {
+  require_cmd docker
+  if ! docker info >/dev/null 2>&1; then
+    echo "Cannot reach Docker daemon. Use a user with docker access (usually deploy)." >&2
     exit 1
   fi
 }
 
-deploy_site() {
-  log "Deploying site '${SITE_NAME}' for hosts: ${SITE_HOSTS}"
-  local SITE_DIR="${TARGET_DIR}/${SITE_NAME}"
-  mkdir -p "${SITE_DIR}"
+ensure_network() {
+  if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
+    echo "Docker network '${NETWORK_NAME}' not found." >&2
+    echo "Create it from Traefik-Deployment (example):" >&2
+    echo "  NETWORK_NAME=${NETWORK_NAME} /opt/traefik/scripts/create_network.sh" >&2
+    exit 1
+  fi
+}
 
-  # Primary host for curl hint
-  local PRIMARY_HOST
-  PRIMARY_HOST="$(echo "$SITE_HOSTS" | awk '{print $1}')"
+write_compose() {
+  local site_dir="${TARGET_DIR}/${SITE_NAME}"
+  local compose_file="${site_dir}/docker-compose.yml"
+  local rule_hosts=""
+  local middleware_label=""
+  local host
 
-  # Build a Traefik Host() rule using OR syntax
-  local RULE_HOSTS=""
-  for h in ${SITE_HOSTS}; do
-    if [[ -z "${RULE_HOSTS}" ]]; then
-      RULE_HOSTS="Host(\`${h}\`)"
+  if [[ -f "$compose_file" ]] && ! is_true "$FORCE"; then
+    echo "Compose file already exists at ${compose_file}." >&2
+    echo "Set FORCE=true to overwrite." >&2
+    exit 1
+  fi
+
+  for host in "${SITE_HOSTS_ARRAY[@]}"; do
+    if [[ -z "$rule_hosts" ]]; then
+      rule_hosts="Host(\`${host}\`)"
     else
-      RULE_HOSTS="${RULE_HOSTS} || Host(\`${h}\`)"
+      rule_hosts="${rule_hosts} || Host(\`${host}\`)"
     fi
   done
 
-  log "Writing ${SITE_DIR}/docker-compose.yml ..."
-  cat > "${SITE_DIR}/docker-compose.yml" <<YAML
-version: "3.9"
+  if [[ -n "$MIDDLEWARES" ]]; then
+    middleware_label="      - \"traefik.http.routers.${SITE_NAME}.middlewares=${MIDDLEWARES}\""
+  fi
 
+  mkdir -p "$site_dir"
+  log "Writing ${compose_file}"
+  cat >"$compose_file" <<EOF
 services:
   ${SITE_NAME}:
     image: ${SITE_IMAGE}
@@ -112,40 +212,63 @@ services:
       - ${NETWORK_NAME}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.${SITE_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${SITE_NAME}.entrypoints=${ENTRYPOINTS}"
       - "traefik.http.routers.${SITE_NAME}.tls=true"
-      - "traefik.http.routers.${SITE_NAME}.tls.certresolver=cf"
-      - "traefik.http.routers.${SITE_NAME}.rule=${RULE_HOSTS}"
+      - "traefik.http.routers.${SITE_NAME}.tls.certresolver=${CERT_RESOLVER}"
+      - "traefik.http.routers.${SITE_NAME}.rule=${rule_hosts}"
       - "traefik.http.routers.${SITE_NAME}.service=${SITE_NAME}"
-      - "traefik.http.services.${SITE_NAME}.loadbalancer.server.port=80"
+      - "traefik.http.services.${SITE_NAME}.loadbalancer.server.port=${SITE_PORT}"
+${middleware_label}
 
 networks:
   ${NETWORK_NAME}:
     external: true
-YAML
+EOF
 
-  log "Bringing up ${SITE_NAME} ..."
-  docker compose -f "${SITE_DIR}/docker-compose.yml" up -d
-  log "✅ Deployed ${SITE_NAME} for hosts: ${SITE_HOSTS}"
-
-  log "Active containers"
-  docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-  echo
-  echo "Try:   curl -I https://${PRIMARY_HOST}"
+  COMPOSE_FILE="$compose_file"
+  PRIMARY_HOST="${SITE_HOSTS_ARRAY[0]}"
 }
 
-post_checks() {
-  log "Active containers"
-  docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-  echo
-  echo "Try:   curl -I https://$(echo "$SITE_HOSTS" | awk '{print $1}')"
+validate_compose() {
+  docker compose -f "$COMPOSE_FILE" config -q
 }
 
-ensure_docker
-check_network
-deploy_site
-post_checks
+deploy_if_requested() {
+  if is_true "$DEPLOY_NOW"; then
+    log "Deploying ${SITE_NAME} (DEPLOY_NOW=${DEPLOY_NOW})"
+    docker compose -f "$COMPOSE_FILE" pull
+    docker compose -f "$COMPOSE_FILE" up -d
+    docker compose -f "$COMPOSE_FILE" ps
+  else
+    log "DEPLOY_NOW=${DEPLOY_NOW}; compose scaffold only"
+  fi
+}
 
-echo
-echo "✅ Done. DNS for these hosts should point at this server with Cloudflare proxy ON."
-echo "   Certificates will be issued/renewed automatically via Let's Encrypt DNS-01."
+next_steps() {
+  cat <<EOF
+
+✅ Compose ready at:
+  ${COMPOSE_FILE}
+
+Manual deploy commands:
+  docker compose -f ${COMPOSE_FILE} pull
+  docker compose -f ${COMPOSE_FILE} up -d
+
+Verify route:
+  curl -I https://${PRIMARY_HOST}
+EOF
+}
+
+main() {
+  load_env
+  apply_defaults
+  validate_inputs
+  ensure_docker
+  ensure_network
+  write_compose
+  validate_compose
+  deploy_if_requested
+  next_steps
+}
+
+main "$@"

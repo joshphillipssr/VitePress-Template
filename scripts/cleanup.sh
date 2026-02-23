@@ -1,59 +1,72 @@
 #!/usr/bin/env bash
-#
-# cleanup.sh — Clean JUST the jpsr site deployment on this host.
-#
-# This script will:
-#   - Stop and remove the jpsr container/stack
-#   - Remove /opt/sites/jpsr (the runtime deploy dir)
-#   - Remove /opt/joshphillipssr.com (the site repo clone)
-#
-# It will NOT:
-#   - Touch Traefik
-#   - Touch the 'deploy' user
-#   - Prune Docker globally
-#   - Remove the shared 'traefik_proxy' network
-#
-# Run with:
-#   sudo /opt/joshphillipssr.com/scripts/cleanup.sh
-#
-
 set -euo pipefail
 
-SITE_NAME="${SITE_NAME:-jpsr}"
-SITE_DEPLOY_DIR="/opt/sites/${SITE_NAME}"
-SITE_REPO_DIR="/opt/joshphillipssr.com"
+# cleanup.sh
+# Remove a deployed site stack and its generated host directories.
+#
+# Required:
+#   SITE_NAME (or first arg)
+#
+# Optional:
+#   TARGET_DIR      default: /opt/sites
+#   SITE_REPO_DIR   optional additional checkout path to remove
+#   ENV_FILE        default: <repo-root>/site.env
 
-if [[ "$EUID" -ne 0 ]]; then
-  echo "This script must be run as root. Try:"
-  echo "  sudo $0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_FILE="${ENV_FILE:-${REPO_ROOT}/site.env}"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+SITE_NAME="${SITE_NAME:-${1:-}}"
+TARGET_DIR="${TARGET_DIR:-/opt/sites}"
+SITE_REPO_DIR="${SITE_REPO_DIR:-}"
+SITE_DEPLOY_DIR="${TARGET_DIR}/${SITE_NAME}"
+
+if [[ -z "$SITE_NAME" ]]; then
+  echo "SITE_NAME is required (env or first arg)." >&2
+  exit 1
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Missing required command: docker" >&2
+  exit 1
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Cannot reach Docker daemon. Use a user with docker access." >&2
   exit 1
 fi
 
 echo "==> Cleaning site '${SITE_NAME}'"
 echo "    Deploy dir: ${SITE_DEPLOY_DIR}"
-echo "    Repo dir:   ${SITE_REPO_DIR}"
+if [[ -n "$SITE_REPO_DIR" ]]; then
+  echo "    Repo dir:   ${SITE_REPO_DIR}"
+fi
 
-echo "==> Stopping site via docker compose (if present)..."
 if [[ -f "${SITE_DEPLOY_DIR}/docker-compose.yml" ]]; then
-  docker compose -f "${SITE_DEPLOY_DIR}/docker-compose.yml" down || true
+  echo "==> Stopping compose stack..."
+  docker compose -f "${SITE_DEPLOY_DIR}/docker-compose.yml" down --remove-orphans || true
 else
-  echo "No docker-compose.yml found at ${SITE_DEPLOY_DIR}, skipping compose down."
+  echo "No compose file found at ${SITE_DEPLOY_DIR}; skipping compose down."
 fi
 
-echo "==> Ensuring any standalone '${SITE_NAME}' container is removed..."
 if docker ps -a --format '{{.Names}}' | grep -qx "${SITE_NAME}"; then
+  echo "==> Removing container ${SITE_NAME}..."
   docker rm -f "${SITE_NAME}" || true
-else
-  echo "Container '${SITE_NAME}' not found, skipping."
 fi
 
-echo "==> Removing site deploy directory: ${SITE_DEPLOY_DIR}"
+echo "==> Removing deploy directory: ${SITE_DEPLOY_DIR}"
 rm -rf "${SITE_DEPLOY_DIR}"
 
-echo "==> Removing site repo clone (if present): ${SITE_REPO_DIR}"
-rm -rf "${SITE_REPO_DIR}"
+if [[ -n "$SITE_REPO_DIR" ]]; then
+  echo "==> Removing repo directory: ${SITE_REPO_DIR}"
+  rm -rf "${SITE_REPO_DIR}"
+fi
 
 echo "✅ Site cleanup complete."
-echo "Host Traefik, Docker install, and shared networks/users were left intact."
-echo
-echo "You can now re-bootstrap the site by following Step 3 in the jpsr README."
