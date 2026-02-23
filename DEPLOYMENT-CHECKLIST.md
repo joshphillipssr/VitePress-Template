@@ -5,9 +5,7 @@ Operator checklist for deploying a template-derived VitePress site behind Traefi
 ## Pre-Deploy
 
 - [ ] Traefik host is healthy (`docker ps` shows Traefik running).
-- [ ] Cloudflare DNS records exist for all site hostnames.
-- [ ] Cloudflare proxy is enabled for those records.
-- [ ] Cloudflare SSL mode is `Full (strict)`.
+- [ ] Cloudflare prerequisites completed per [Traefik-Deployment Cloudflare Setup Baseline](https://github.com/joshphillipssr/Traefik-Deployment/blob/main/CLOUDFLARE-SETUP.md).
 - [ ] Derived repo exists and workflow has produced a GHCR image.
 - [ ] GHCR image tag and visibility are confirmed.
 
@@ -53,6 +51,6 @@ Use one of these rollback methods:
 - GHCR pull error:
   - Validate package visibility/permissions and `SITE_IMAGE` spelling.
 - TLS/certificate issues:
-  - Validate Cloudflare DNS/proxy and Traefik resolver configuration.
+  - Re-check [Traefik-Deployment Cloudflare Setup Baseline](https://github.com/joshphillipssr/Traefik-Deployment/blob/main/CLOUDFLARE-SETUP.md) and Traefik resolver configuration.
 - Container starts but route fails:
   - Check `SITE_PORT` matches the app container listening port.

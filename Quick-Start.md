@@ -6,7 +6,7 @@ Canonical first-time flow for deploying a template-derived VitePress site behind
 
 - Traefik host already provisioned with [Traefik-Deployment](https://github.com/joshphillipssr/Traefik-Deployment)
 - `traefik_proxy` network exists on host
-- Cloudflare DNS records point to host, proxy enabled, SSL mode `Full (strict)`
+- Cloudflare prerequisites completed per [Traefik-Deployment Cloudflare Setup Baseline](https://github.com/joshphillipssr/Traefik-Deployment/blob/main/CLOUDFLARE-SETUP.md)
 - GitHub repository created from this template
 
 ## 1. Create Derived Repository

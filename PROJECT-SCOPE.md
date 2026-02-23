@@ -17,7 +17,7 @@ In scope:
 Out of scope:
 
 - Provisioning Traefik itself (handled by Traefik-Deployment)
-- Managing DNS providers other than documented Cloudflare pattern
+- Managing DNS providers other than the [Traefik-Deployment Cloudflare Setup Baseline](https://github.com/joshphillipssr/Traefik-Deployment/blob/main/CLOUDFLARE-SETUP.md)
 - One-click platform-specific automation beyond provided shell scripts
 
 ## Integration Boundary
