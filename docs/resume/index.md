@@ -4,15 +4,15 @@ Replace this page with your own profile, CV, or project history.
 
 ## Summary
 
-Write a short professional summary that fits your audience.
+Write a short professional summary for your audience.
 
 ## Experience
 
-### Role Title — Location
-**Start Date – End Date**
+### Role Title - Organization
+**Start Date - End Date**
 
-- Highlight impact, not just responsibilities.
-- Keep bullets concise and measurable where possible.
+- Highlight impact, not only responsibilities.
+- Keep bullets concise and measurable.
 
 ## Education
 

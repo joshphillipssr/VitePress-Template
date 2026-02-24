@@ -56,6 +56,61 @@ FORCE=false
 
 `site.env` is gitignored by default.
 
+## Optional: Expiring Private Resume Links
+
+This template supports signed, expiring links for a private markdown resume route.
+
+Key variables in `site.env`:
+
+```text
+SITE_BASE_URL=https://example.com
+RESUME_SIGNING_SECRET=<random-secret>
+RESUME_ROUTE=/_private/resume
+RESUME_LINK_TTL_SECONDS=900
+RESUME_PRIVATE_FILE=/run/private/resume.md
+RESUME_PRIVATE_FILE_HOST=/opt/secure/private-resume.md
+```
+
+Generate a link:
+
+```bash
+ENV_FILE=/opt/sites/<site-name>/site.env \
+  /opt/sites/<site-name>/scripts/generate_private_resume_link.sh
+```
+
+If `RESUME_PRIVATE_FILE_HOST` is set, `deploy_to_host.sh` mounts that file read-only into the container.
+
+## Optional: Ask Assistant
+
+Ask Assistant provides AI Q&A grounded in local site docs plus public GitHub repo metadata.
+
+Required variable:
+
+```text
+OPENAI_API_KEY=<secret>
+```
+
+Optional variables:
+
+Legacy ASK_JOSHGPT_* names are also accepted for compatibility.
+
+```text
+ASK_ASSISTANT_MODEL=gpt-4o-mini
+ASK_ASSISTANT_MAX_TOKENS=700
+ASK_ASSISTANT_TEMPERATURE=0.2
+ASK_ASSISTANT_TIMEOUT_MS=30000
+ASK_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS=300
+ASK_ASSISTANT_RATE_LIMIT_MAX=10
+ASK_ASSISTANT_MAX_QUESTION_CHARS=1200
+```
+
+Routes:
+
+```text
+/ask-assistant/        # Ask Assistant UI page
+/api/ask-assistant     # backend API endpoint
+```
+
 ## Script Responsibilities
 
 - `scripts/bootstrap_site_on_host.sh`
@@ -71,6 +126,9 @@ FORCE=false
 
 - `scripts/update_site.sh`
   - Pulls latest image and recreates the site container.
+
+- `scripts/generate_private_resume_link.sh`
+  - Generates signed URLs with expiry for `RESUME_ROUTE`.
 
 - `scripts/cleanup.sh`
   - Stops/removes the site stack and deletes generated site directory.

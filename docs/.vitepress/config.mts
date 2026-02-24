@@ -6,7 +6,9 @@ export default defineConfig({
   themeConfig: {
     sidebar: [
       { text: 'Home', link: '/' },
-      { text: 'Resume', link: '/Resume/' }
+      { text: 'Resume', link: '/resume/' },
+      { text: 'Projects', link: '/projects/' },
+      { text: 'Ask Assistant', link: '/ask-assistant/' }
     ]
   }
 })

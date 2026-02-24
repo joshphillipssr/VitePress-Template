@@ -123,9 +123,59 @@ SITE_NAME="<site-name>" /opt/traefik/scripts/update_site.sh
 SITE_NAME="<site-name>" /opt/sites/<site-name>/scripts/cleanup.sh
 ```
 
+## 9. Optional: Expiring Private Resume Link
+
+Add these to `site.env`:
+
+```text
+SITE_BASE_URL=https://example.com
+RESUME_SIGNING_SECRET=<random-secret>
+RESUME_ROUTE=/_private/resume
+RESUME_LINK_TTL_SECONDS=900
+RESUME_PRIVATE_FILE=/run/private/resume.md
+RESUME_PRIVATE_FILE_HOST=/opt/secure/private-resume.md
+```
+
+Then deploy/redeploy and generate a signed link:
+
+```bash
+ENV_FILE=/opt/sites/<site-name>/site.env \
+  /opt/sites/<site-name>/scripts/generate_private_resume_link.sh
+```
+
+## 10. Optional: Ask Assistant
+
+Add this to `site.env`:
+
+```text
+OPENAI_API_KEY=<secret>
+```
+
+Optional tuning values:
+
+Legacy ASK_JOSHGPT_* names are also accepted for compatibility.
+
+```text
+ASK_ASSISTANT_MODEL=gpt-4o-mini
+ASK_ASSISTANT_MAX_TOKENS=700
+ASK_ASSISTANT_TEMPERATURE=0.2
+ASK_ASSISTANT_TIMEOUT_MS=30000
+ASK_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS=300
+ASK_ASSISTANT_RATE_LIMIT_MAX=10
+ASK_ASSISTANT_MAX_QUESTION_CHARS=1200
+```
+
+Then redeploy and verify:
+
+```bash
+curl -I https://<primary-hostname>/ask-assistant/
+```
+
 ## Troubleshooting
 
 - `network not found`: run `NETWORK_NAME=traefik_proxy /opt/traefik/scripts/create_network.sh`
 - GHCR pull fails: verify package visibility and `SITE_IMAGE` value
 - TLS issues: verify Cloudflare proxy + DNS + SSL mode
 - Permission issues: run deployment as `deploy` user (or equivalent Docker-enabled user)
+- Signed link errors: verify `RESUME_SIGNING_SECRET`, link expiry, and `RESUME_PRIVATE_FILE_HOST` path
+- Ask Assistant errors: verify `OPENAI_API_KEY` in `site.env` and check container logs for upstream API failures
